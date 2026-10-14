@@ -45,11 +45,17 @@ export default {
     if (body.requestId !== undefined && (typeof body.requestId !== "string" || !uuid.test(body.requestId))) {
       return reply(400, { ok: false, error: "requestId must be a UUID." });
     }
-    // Only standalone hashtags; keep the original content intact.
+    // Extract standalone hashtags before removing them from the note body.
     const tags = [...new Set([...content.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu)]
       .map(match => match[1].toLowerCase()))];
     if (tags.length > 50 || tags.some(tag => tag.length > 50)) {
       return reply(400, { ok: false, error: "Use at most 50 tags, each at most 50 characters." });
+    }
+    // Whitespace is a boundary, not part of the match, so adjacent tags work.
+    // Preserve line breaks, Markdown headings, and URL fragments.
+    const noteContent = content.replace(/(?<!\S)#[\p{L}\p{N}_-]+[ \t]*/gu, "").trim();
+    if (!noteContent) {
+      return reply(400, { ok: false, error: "Add some note text along with your hashtags." });
     }
     const id = `shortcut:${(body.requestId ?? randomUUID()).toLowerCase()}`;
     try {
@@ -62,7 +68,7 @@ export default {
       if (membership.error) throw membership.error;
       if (!membership.data) return reply(403, { ok: false, error: "The configured account does not have board access." });
       const { error } = await db.from("thoughtboard_notes").upsert({
-        user_id: owner, id, title: "", content,
+        user_id: owner, id, title: "", content: noteContent,
         tags: tags.filter(tag => tag !== "private"),
         is_private: tags.includes("private"), note_date: null,
         created_at: new Date().toISOString(),
