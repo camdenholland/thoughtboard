@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
+import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ATTACHMENT_PATTERN, CLOUD_IMAGE_PATTERN, loadImage } from "./images";
 
-function NoteImage({ src = "", alt = "" }: { src?: string; alt?: string }) {
+export function NoteImage({
+  src = "",
+  alt = "",
+}: {
+  src?: string;
+  alt?: string;
+}) {
   const [localImage, setLocalImage] = useState<{
     source: string;
     url: string;
@@ -34,7 +41,7 @@ function NoteImage({ src = "", alt = "" }: { src?: string; alt?: string }) {
     };
   }, [local, src]);
 
-  if (!src || failedSource === src)
+  if (!src || (!local && !/^https?:\/\//i.test(src)) || failedSource === src)
     return (
       <span className="image-message">
         Image unavailable{alt ? `: ${alt}` : ""}
@@ -57,6 +64,17 @@ function NoteImage({ src = "", alt = "" }: { src?: string; alt?: string }) {
   );
 }
 
+const markdownComponents: Components = {
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  img: ({ src, alt }) => (
+    <NoteImage src={typeof src === "string" ? src : ""} alt={alt} />
+  ),
+};
+
 export default function MarkdownContent({ content }: { content: string }) {
   return (
     <div className="markdown-content">
@@ -74,16 +92,7 @@ export default function MarkdownContent({ content }: { content: string }) {
           }
           return defaultUrlTransform(url);
         }}
-        components={{
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {children}
-            </a>
-          ),
-          img: ({ src, alt }) => (
-            <NoteImage src={typeof src === "string" ? src : ""} alt={alt} />
-          ),
-        }}
+        components={markdownComponents}
       >
         {content || "*This thought is still taking shape.*"}
       </Markdown>

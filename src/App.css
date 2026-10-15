@@ -217,14 +217,14 @@
   background: #79996c;
 }
 .board {
-  columns: 220px;
-  column-gap: 12px;
+  position: relative;
+  width: 100%;
 }
 .note {
   break-inside: avoid;
   display: inline-block;
   width: 100%;
-  margin: 0 0 12px;
+  margin: 0;
   padding: 12px 13px 15px;
   background: #191b1c;
   border: 1px solid var(--card-accent, #343638);
@@ -440,7 +440,7 @@ button.tag:hover {
   font-family: Georgia, serif;
   font-weight: 400;
   font-size: 30px;
-  margin: 0 0 12px;
+  margin: 0;
   letter-spacing: -0.6px;
 }
 .empty-state p {
@@ -681,7 +681,7 @@ input[type="checkbox"] {
     padding: 0 16px 32px;
   }
   .board {
-    columns: 2;
+    width: 100%;
   }
   .note {
     padding: 11px;
@@ -716,7 +716,7 @@ input[type="checkbox"] {
     padding-top: 14px;
   }
   .board {
-    columns: 1;
+    width: 100%;
   }
   .note {
     padding: 12px 14px 16px;
@@ -861,4 +861,140 @@ input[type="checkbox"] {
     padding: 6px;
     font-size: 11px;
   }
+}
+
+.organize-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+.sort-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #a9afaa;
+}
+.sort-control select {
+  padding: 7px 9px;
+  background: #191b1c;
+  color: #dddeda;
+  border: 1px solid #34383a;
+  border-radius: 6px;
+  max-width: 100%;
+}
+.organize-hint {
+  font-size: 10px;
+  color: #929c96;
+}
+.board-tile {
+  min-width: 0;
+}
+.board-tile .note {
+  display: block;
+}
+.board-tile.dragging {
+  opacity: 0.3;
+}
+.board-tile.drop-target:not(.dragging) .note {
+  outline: 2px solid #99bba6;
+  outline-offset: 3px;
+}
+.drag-handle {
+  touch-action: none;
+  cursor: grab;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.note-meta .edit-note {
+  margin-left: auto;
+}
+.drag-preview {
+  opacity: 0.95;
+  box-shadow: 0 15px 45px #0008;
+  cursor: grabbing;
+}
+.drag-preview button {
+  pointer-events: none;
+}
+.tag-picker {
+  margin-top: 12px;
+}
+.tag-picker-label {
+  display: block;
+  font-size: 11px;
+  color: #a4b196;
+  margin-bottom: 8px;
+}
+.tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 120px;
+  overflow: auto;
+}
+.tag-options button[aria-pressed="true"] {
+  background: #354b3c;
+  border-color: #99bba6;
+  color: #eff2e9;
+}
+
+.rich-content {
+  min-height: 230px;
+  padding: 8px 2px;
+  outline: none;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rich-content p {
+  margin: 0 0 12px;
+}
+.rich-content:focus {
+  outline: none;
+}
+.rich-content img {
+  max-width: 100%;
+  max-height: 350px;
+  object-fit: contain;
+}
+.editor-image {
+  display: inline-block;
+  max-width: 100%;
+}
+.rich-content ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+.rich-content ul[data-type="taskList"] li {
+  display: flex;
+  gap: 8px;
+}
+.rich-content ul[data-type="taskList"] li > div {
+  flex: 1;
+}
+.rich-content table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+.rich-content th,
+.rich-content td {
+  border: 1px solid #53604a;
+  padding: 6px;
+  vertical-align: top;
+}
+.rich-content .ProseMirror-selectednode {
+  outline: 2px solid #99bba6;
+}
+.format-buttons button[aria-pressed="true"] {
+  background: #405735;
+  color: #f0ffe7;
+  border-color: #99bba6;
 }

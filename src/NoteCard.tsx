@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import MarkdownContent from "./MarkdownContent";
 import Icon from "./Icons";
 import { formatCreatedAt, formatNoteDate } from "./notes";
@@ -7,17 +7,19 @@ import { tagColor, tagStyle } from "./tagColors";
 
 type Props = {
   note: Note;
+  dragHandle?: ReactNode;
   onEdit: (note: Note) => void;
   onTag: (tag: string) => void;
 };
 
-export default function NoteCard({ note, onEdit, onTag }: Props) {
+export default function NoteCard({ note, onEdit, onTag, dragHandle }: Props) {
   const style = {
     "--card-accent": note.tags[0] ? `${tagColor(note.tags[0])}88` : "#343638",
   } as CSSProperties;
   return (
     <article className="note" style={style}>
       <header className="note-meta">
+        {dragHandle}
         {note.createdAt ? (
           <time
             dateTime={note.createdAt}

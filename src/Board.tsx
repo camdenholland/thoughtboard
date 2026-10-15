@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import NoteCard from "./NoteCard";
+import MasonryBoard from "./MasonryBoard";
+import {
+  EMPTY_LAYOUT,
+  SORT_OPTIONS,
+  fetchLayout,
+  saveLayout,
+  sortNotes,
+  mergeVisibleOrder,
+} from "./boardLayout";
+import type { BoardLayout, SortMode } from "./boardLayout";
 import NoteEditor from "./NoteEditor";
 import Icon from "./Icons";
 import { getVisibleNotes, loadNotes } from "./notes";
@@ -17,6 +26,11 @@ import "./App.css";
 export default function Board({ userId }: { userId: string }) {
   const [initial] = useState(loadNotes);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [layout, setLayout] = useState<BoardLayout>(EMPTY_LAYOUT);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [layoutError, setLayoutError] = useState("");
+  const [organizing, setOrganizing] = useState(false);
+  const organizingRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -48,8 +62,9 @@ export default function Board({ userId }: { userId: string }) {
     ...new Set(accessibleNotes.flatMap((note) => note.tags)),
   ].sort();
   const activeTags = selectedTags.filter((tag) => availableTags.includes(tag));
+  const orderedNotes = sortNotes(notes, layout);
   const visibleNotes = getVisibleNotes(
-    notes,
+    orderedNotes,
     showPrivate,
     activeTags,
     query,
@@ -77,9 +92,17 @@ export default function Board({ userId }: { userId: string }) {
     const version = ++requestVersion.current;
     setLoading(true);
     try {
-      const next = await fetchNotes(userId);
+      const [next, preferences] = await Promise.all([
+        fetchNotes(userId),
+        fetchLayout(userId)
+          .then((value) => ({ value, error: "" }))
+          .catch((reason) => ({ value: null, error: errorMessage(reason) })),
+      ]);
       if (alive.current && version === requestVersion.current) {
         setNotes(next);
+        if (preferences.value) setLayout(preferences.value);
+        setLayoutReady(!!preferences.value);
+        setLayoutError(preferences.error);
         setReady(true);
         setSaveError("");
       }
@@ -156,6 +179,30 @@ export default function Board({ userId }: { userId: string }) {
       if (error) throw error;
     } catch (reason) {
       setSaveError(errorMessage(reason));
+    }
+  }
+
+  async function organize(next: BoardLayout) {
+    if (organizingRef.current || !layoutReady || loading || importing) return;
+    const previous = layout;
+    organizingRef.current = true;
+    setOrganizing(true);
+    setLayout(next);
+    setLayoutError("");
+    try {
+      const saved = await saveLayout(userId, next);
+      if (alive.current) {
+        setLayout(saved);
+        setStatus("Board order saved.");
+      }
+    } catch (reason) {
+      if (alive.current) {
+        setLayout(previous);
+        setLayoutError(errorMessage(reason));
+      }
+    } finally {
+      organizingRef.current = false;
+      if (alive.current) setOrganizing(false);
     }
   }
 
@@ -253,14 +300,14 @@ export default function Board({ userId }: { userId: string }) {
         <div className="account-actions">
           <button
             className="small-button"
-            disabled={loading || importing}
+            disabled={loading || importing || organizing}
             onClick={() => void refresh()}
           >
             {loading ? "Loading…" : "Refresh"}
           </button>
           <button
             className="small-button"
-            disabled={importing}
+            disabled={importing || organizing}
             onClick={() => void signOut()}
           >
             Sign out
@@ -310,7 +357,7 @@ export default function Board({ userId }: { userId: string }) {
               aria-label="Add note"
               title="Add a thought"
               onClick={addNote}
-              disabled={!ready || loading || importing}
+              disabled={!ready || loading || importing || organizing}
             >
               <Icon name="plus" size={21} />
             </button>
@@ -354,6 +401,33 @@ export default function Board({ userId }: { userId: string }) {
               />
             </label>
           </div>
+          <div className="organize-row">
+            <label className="sort-control">
+              Sort
+              <select
+                aria-label="Sort notes"
+                value={layout.sort}
+                disabled={!layoutReady || loading || importing || organizing}
+                onChange={(event) =>
+                  void organize({
+                    ...layout,
+                    sort: event.target.value as SortMode,
+                  })
+                }
+              >
+                {SORT_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="organize-hint">
+              {organizing
+                ? "Saving order…"
+                : "Drag ⠿ to arrange · dragging switches to manual order"}
+            </span>
+          </div>
           <div className="results-row">
             <span role="status">
               {visibleNotes.length}{" "}
@@ -380,6 +454,11 @@ export default function Board({ userId }: { userId: string }) {
             )}
           </div>
         </section>
+        {layoutError && (
+          <p className="error" role="alert">
+            {layoutError}
+          </p>
+        )}
         {saveError && (
           <p className="error" role="alert">
             {saveError}
@@ -420,20 +499,25 @@ export default function Board({ userId }: { userId: string }) {
             )}
           </div>
         ) : visibleNotes.length ? (
-          <section className="board" aria-label="Notes">
-            {visibleNotes.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                onEdit={(selected) =>
-                  !loading &&
-                  !importing &&
-                  setEditor({ note: selected, isNew: false })
-                }
-                onTag={toggleTag}
-              />
-            ))}
-          </section>
+          <MasonryBoard
+            notes={visibleNotes}
+            disabled={!layoutReady || loading || importing || organizing}
+            onEdit={(selected) => {
+              if (!loading && !importing && !organizing)
+                setEditor({ note: selected, isNew: false });
+            }}
+            onTag={toggleTag}
+            onOrder={(ids) =>
+              void organize({
+                ...layout,
+                sort: "manual",
+                order: mergeVisibleOrder(
+                  orderedNotes.map((note) => note.id),
+                  ids,
+                ),
+              })
+            }
+          />
         ) : (
           <div className="empty-state">
             <span className="empty-symbol">✳</span>
@@ -450,7 +534,7 @@ export default function Board({ userId }: { userId: string }) {
             <button
               className="primary-button"
               onClick={hasFilters ? clearFilters : addNote}
-              disabled={loading || importing}
+              disabled={loading || importing || organizing}
             >
               {hasFilters ? "Clear filters" : "Add your first thought"}
             </button>
@@ -462,6 +546,7 @@ export default function Board({ userId }: { userId: string }) {
           key={editor.note.id}
           note={editor.note}
           isNew={editor.isNew}
+          availableTags={availableTags}
           onSave={saveNote}
           onDelete={deleteNote}
           onClose={() => setEditor(null)}

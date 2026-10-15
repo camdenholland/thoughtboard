@@ -1,15 +1,45 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import MarkdownContent from "./MarkdownContent";
+import MarkdownContent, { NoteImage } from "./MarkdownContent";
+import {
+  EditorContent,
+  useEditor,
+  useEditorState,
+  NodeViewWrapper,
+  ReactNodeViewRenderer,
+} from "@tiptap/react";
+import type { NodeViewProps } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { Markdown } from "@tiptap/markdown";
+import Image from "@tiptap/extension-image";
+import { TableKit } from "@tiptap/extension-table";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
 import Icon from "./Icons";
 import { saveImage } from "./images";
 import { isValidDay, normalizeTags } from "./notes";
 import type { Note } from "./notes";
 import { errorMessage } from "./supabase";
 
+function EditorImage({ node }: NodeViewProps) {
+  return (
+    <NodeViewWrapper as="div" className="editor-image" contentEditable={false}>
+      <NoteImage src={node.attrs.src} alt={node.attrs.alt} />
+    </NodeViewWrapper>
+  );
+}
+const SafeImage = Image.extend({
+  addNodeView() {
+    return ReactNodeViewRenderer(EditorImage);
+  },
+});
+const needsSource = (text: string) =>
+  /(^ {0,3}\[\^|<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^>]*|\/?)>)/m.test(text);
+
 type Props = {
   note: Note;
   isNew: boolean;
+  availableTags: string[];
   onSave: (note: Note) => Promise<void>;
   onDelete: (id: string) => Promise<boolean>;
   onClose: () => void;
@@ -18,6 +48,7 @@ type Props = {
 export default function NoteEditor({
   note,
   isNew,
+  availableTags,
   onSave,
   onDelete,
   onClose,
@@ -31,11 +62,73 @@ export default function NoteEditor({
   const [tagText, setTagText] = useState(note.tags.join(", "));
   const [isPrivate, setIsPrivate] = useState(note.isPrivate);
   const [noteDate, setNoteDate] = useState(note.noteDate ?? "");
-  const [preview, setPreview] = useState(false);
+  const [mode, setMode] = useState<"write" | "markdown" | "preview">(
+    needsSource(note.content) ? "markdown" : "write",
+  );
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [error, setError] = useState("");
+  const rich = useEditor({
+    extensions: [
+      StarterKit.configure({ underline: false, link: { openOnClick: false } }),
+      SafeImage,
+      TableKit,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      Markdown,
+    ],
+    content: note.content,
+    contentType: "markdown",
+    editorProps: {
+      attributes: {
+        role: "textbox",
+        "aria-label": "Note content",
+        "aria-multiline": "true",
+        class: "rich-content markdown-content",
+      },
+    },
+    onUpdate: ({ editor }) => setContent(editor.getMarkdown()),
+  });
+  const formatting = useEditorState({
+    editor: rich,
+    selector: ({ editor }) => ({
+      bold: editor?.isActive("bold") ?? false,
+      italic: editor?.isActive("italic") ?? false,
+      strike: editor?.isActive("strike") ?? false,
+    }),
+  });
+  useEffect(() => {
+    rich?.setEditable(!saving && !uploading, false);
+  }, [rich, saving, uploading]);
+  const chosenTags = normalizeTags(tagText.split(","));
+  const suggestedTags = [...new Set([...availableTags, ...note.tags])]
+    .filter((tag) => tag !== "private")
+    .sort();
+  function toggleExistingTag(tag: string) {
+    setTagText(
+      (chosenTags.includes(tag)
+        ? chosenTags.filter((item) => item !== tag)
+        : [...chosenTags, tag]
+      ).join(", "),
+    );
+  }
+  function changeMode(next: "write" | "markdown" | "preview") {
+    if (next === "write") {
+      if (needsSource(content)) {
+        setError(
+          "Use Markdown mode to preserve HTML or footnote markup in this note.",
+        );
+        return;
+      }
+      rich?.commands.setContent(content, {
+        contentType: "markdown",
+        emitUpdate: false,
+      });
+    }
+    setMode(next);
+    setError("");
+  }
   const dirty =
     title !== note.title ||
     content !== note.content ||
@@ -46,7 +139,8 @@ export default function NoteEditor({
   useEffect(() => {
     const element = dialog.current;
     element?.showModal();
-    textarea.current?.focus();
+    if (mode === "markdown") textarea.current?.focus();
+    else rich?.commands.focus("end");
     return () => {
       element?.close();
     };
@@ -123,15 +217,6 @@ export default function NoteEditor({
     });
   }
 
-  function formatSelection(marker: string) {
-    const field = textarea.current;
-    const selection = content.slice(
-      field?.selectionStart ?? 0,
-      field?.selectionEnd ?? 0,
-    );
-    insert(`${marker}${selection || "text"}${marker}`);
-  }
-
   function insertUrl(image: boolean) {
     const input = window.prompt(
       image ? "Image URL (https://…)" : "Link URL (https://…)",
@@ -155,7 +240,20 @@ export default function NoteEditor({
       " ",
     );
     setError("");
-    insert(`${image ? "!" : ""}[${safe}](<${url.href}>)`);
+    if (mode === "write") {
+      if (image)
+        rich?.chain().focus().setImage({ src: url.href, alt: safe }).run();
+      else
+        rich
+          ?.chain()
+          .focus()
+          .insertContent({
+            type: "text",
+            text: safe,
+            marks: [{ type: "link", attrs: { href: url.href } }],
+          })
+          .run();
+    } else insert(`${image ? "!" : ""}[${safe}](<${url.href}>)`);
   }
 
   async function upload(event: ChangeEvent<HTMLInputElement>) {
@@ -167,9 +265,13 @@ export default function NoteEditor({
     try {
       const source = await saveImage(file);
       const label = file.name.replace(/[\\\[\]\n\r]/g, " ");
-      setContent(
-        (current) => `${current}${current ? "\n\n" : ""}![${label}](${source})`,
-      );
+      if (mode === "write")
+        rich?.chain().focus().setImage({ src: source, alt: label }).run();
+      else
+        setContent(
+          (current) =>
+            `${current}${current ? "\n\n" : ""}![${label}](${source})`,
+        );
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -218,33 +320,73 @@ export default function NoteEditor({
         />
         <div className="editor-toolbar" aria-label="Formatting">
           <div className="editor-tabs">
-            <button aria-pressed={!preview} onClick={() => setPreview(false)}>
+            <button
+              disabled={uploading}
+              aria-pressed={mode === "write"}
+              onClick={() => changeMode("write")}
+            >
               Write
             </button>
-            <button aria-pressed={preview} onClick={() => setPreview(true)}>
+            <button
+              disabled={uploading}
+              aria-pressed={mode === "markdown"}
+              onClick={() => changeMode("markdown")}
+            >
+              Markdown
+            </button>
+            <button
+              disabled={uploading}
+              aria-pressed={mode === "preview"}
+              onClick={() => changeMode("preview")}
+            >
               Preview
             </button>
           </div>
-          {!preview && (
+          {mode !== "preview" && (
             <div className="format-buttons">
+              {mode === "write" && (
+                <>
+                  <button
+                    className="small-button"
+                    aria-label="Bold"
+                    aria-pressed={formatting?.bold ?? false}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => rich?.chain().focus().toggleBold().run()}
+                  >
+                    <strong>B</strong>
+                  </button>
+                  <button
+                    className="small-button"
+                    aria-label="Italic"
+                    aria-pressed={formatting?.italic ?? false}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => rich?.chain().focus().toggleItalic().run()}
+                  >
+                    <em>I</em>
+                  </button>
+                  <button
+                    className="small-button"
+                    aria-label="Strikethrough"
+                    aria-pressed={formatting?.strike ?? false}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => rich?.chain().focus().toggleStrike().run()}
+                  >
+                    <s>S</s>
+                  </button>
+                </>
+              )}
               <button
                 className="small-button"
-                aria-label="Bold"
-                onClick={() => formatSelection("**")}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => insertUrl(false)}
               >
-                <strong>B</strong>
-              </button>
-              <button
-                className="small-button"
-                aria-label="Italic"
-                onClick={() => formatSelection("*")}
-              >
-                <em>I</em>
-              </button>
-              <button className="small-button" onClick={() => insertUrl(false)}>
                 Link
               </button>
-              <button className="small-button" onClick={() => insertUrl(true)}>
+              <button
+                className="small-button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => insertUrl(true)}
+              >
                 Image URL
               </button>
               <button
@@ -265,22 +407,28 @@ export default function NoteEditor({
             onChange={upload}
           />
         </div>
-        {preview ? (
+        <div hidden={mode !== "write"}>
+          <EditorContent editor={rich} />
+        </div>
+        {mode === "preview" && (
           <div className="editor-preview">
             <MarkdownContent content={content} />
           </div>
-        ) : (
+        )}
+        {mode === "markdown" && (
           <textarea
             ref={textarea}
             className="note-content"
-            aria-label="Note content"
+            aria-label="Markdown source"
             placeholder="What's on your mind?"
             value={content}
             onChange={(event) => setContent(event.target.value)}
           />
         )}
         <p className="editor-hint">
-          Markdown supported. *Italic*, **bold**, links, lists, and images.
+          {mode === "write"
+            ? "Toggle B, I, or S, then type. Toggle again to stop. Ctrl / ⌘ + B or I also works."
+            : "Edit Markdown directly, or switch to Write for visual formatting."}
         </p>
         <div className="editor-fields">
           <label className="field-label">
@@ -303,6 +451,27 @@ export default function NoteEditor({
             />
           </label>
         </div>
+        {suggestedTags.length > 0 && (
+          <div className="tag-picker">
+            <span className="tag-picker-label">Choose existing tags</span>
+            <div
+              className="tag-options"
+              role="group"
+              aria-label="Existing tags"
+            >
+              {suggestedTags.map((tag) => (
+                <button
+                  key={tag}
+                  className="small-button"
+                  aria-pressed={chosenTags.includes(tag)}
+                  onClick={() => toggleExistingTag(tag)}
+                >
+                  #{tag}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="editor-options">
           <label className="private-checkbox">
             <input
