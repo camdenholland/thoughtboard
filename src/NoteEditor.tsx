@@ -16,6 +16,7 @@ import { TableKit } from "@tiptap/extension-table";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Icon from "./Icons";
+import { checklistState, sortChecklistMarkdown, sortEditorChecklists } from "./checklists";
 import { saveImage } from "./images";
 import { isValidDay, normalizeTags } from "./notes";
 import type { Note } from "./notes";
@@ -69,13 +70,14 @@ export default function NoteEditor({
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [error, setError] = useState("");
+  const sortingChecklist = useRef(false);
   const rich = useEditor({
     extensions: [
       StarterKit.configure({ underline: false, link: { openOnClick: false } }),
       SafeImage,
       TableKit,
       TaskList,
-      TaskItem.configure({ nested: true }),
+      TaskItem.configure({ nested: true, HTMLAttributes: { "data-type": "taskItem" } }),
       Markdown,
     ],
     content: note.content,
@@ -88,7 +90,19 @@ export default function NoteEditor({
         class: "rich-content markdown-content",
       },
     },
-    onUpdate: ({ editor }) => setContent(editor.getMarkdown()),
+    onUpdate: ({ editor, transaction }) => {
+      const before = checklistState(transaction.before);
+      const after = checklistState(editor.state.doc);
+      if (!sortingChecklist.current && before.count === after.count && before.checked !== after.checked) {
+        sortingChecklist.current = true;
+        try { sortEditorChecklists(editor); } finally { sortingChecklist.current = false; }
+      }
+      setContent(editor.getMarkdown());
+    },
+    onBlur: ({ editor, event }) => {
+      if (event.relatedTarget instanceof Node && editor.view.dom.contains(event.relatedTarget)) return;
+      if (!editor.isDestroyed && editor.isEditable) sortEditorChecklists(editor);
+    },
   });
   const formatting = useEditorState({
     editor: rich,
@@ -96,6 +110,7 @@ export default function NoteEditor({
       bold: editor?.isActive("bold") ?? false,
       italic: editor?.isActive("italic") ?? false,
       strike: editor?.isActive("strike") ?? false,
+      checklist: editor?.isActive("taskList") ?? false,
     }),
   });
   useEffect(() => {
@@ -114,6 +129,10 @@ export default function NoteEditor({
     );
   }
   function changeMode(next: "write" | "markdown" | "preview") {
+    if (mode === "write" && rich) {
+      sortEditorChecklists(rich);
+      if (next !== "write") setContent(rich.getMarkdown());
+    }
     if (next === "write") {
       if (needsSource(content)) {
         setError(
@@ -175,7 +194,7 @@ export default function NoteEditor({
       await onSave({
         ...note,
         title,
-        content,
+        content: sortChecklistMarkdown(mode === "write" && rich ? rich.getMarkdown() : content),
         tags: tags.filter((tag) => tag !== "private"),
         isPrivate: isPrivate || tags.includes("private"),
         noteDate: noteDate || null,
@@ -348,6 +367,15 @@ export default function NoteEditor({
                 <>
                   <button
                     className="small-button"
+                    aria-label="Checklist"
+                    aria-pressed={formatting?.checklist ?? false}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => rich?.chain().focus().toggleTaskList().run()}
+                  >
+                    Checklist
+                  </button>
+                  <button
+                    className="small-button"
                     aria-label="Bold"
                     aria-pressed={formatting?.bold ?? false}
                     onMouseDown={(event) => event.preventDefault()}
@@ -427,9 +455,10 @@ export default function NoteEditor({
         )}
         <p className="editor-hint">
           {mode === "write"
-            ? "Toggle B, I, or S, then type. Toggle again to stop. Ctrl / ⌘ + B or I also works."
+            ? "Toggle B, I, or S, then type. Toggle again to stop. Ctrl+B or Ctrl+I also works."
             : "Edit Markdown directly, or switch to Write for visual formatting."}
         </p>
+        <p className="checklist-hint">Checklists: unchecked first, then A–Z. Text sorts when you leave the editor or save.</p>
         <div className="editor-fields">
           <label className="field-label">
             Tags
@@ -510,7 +539,7 @@ export default function NoteEditor({
             Delete
           </button>
         )}
-        <span className="save-hint">Ctrl / ⌘ + Enter to save</span>
+        <span className="save-hint">Ctrl+Enter to save</span>
         <button
           className="small-button"
           disabled={uploading || saving}

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { sortChecklistMarkdown } from "./checklists";
 import { ATTACHMENT_PATTERN, CLOUD_IMAGE_PATTERN, loadImage } from "./images";
 
 export function NoteImage({
@@ -76,6 +77,7 @@ const markdownComponents: Components = {
 };
 
 export default function MarkdownContent({ content }: { content: string }) {
+  const sortedContent = useMemo(() => sortChecklistMarkdown(content), [content]);
   return (
     <div className="markdown-content">
       <Markdown
@@ -94,7 +96,7 @@ export default function MarkdownContent({ content }: { content: string }) {
         }}
         components={markdownComponents}
       >
-        {content || "*This thought is still taking shape.*"}
+        {sortedContent || "*This thought is still taking shape.*"}
       </Markdown>
     </div>
   );

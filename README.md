@@ -1,10 +1,14 @@
+# Latest update: checklists and particles
+
+**Existing users: start with UPDATE-SETUP.md.** Copy the updated source and install the listed dependencies. This update needs no new SQL if you already applied the organizing update. The package includes a third-party notice for Magic UI Particles. The original setup below is for fresh installations.
+
 # Thoughtboard: Supabase account and cloud storage
 
 Source update for your existing React + TypeScript + Vite project. Adds email/password login, account-restricted notes and image storage, and a retryable import of the prior browser-only board. Keeps the compact layout, Markdown, dates, tags, and private-note confirmation.
 
 ## 1. Create the database and private image bucket
 
-Open your Supabase project's **SQL Editor**, create a query, paste the complete contents of `supabase/schema.sql`, and run it. It creates the notes table, account access list, row-level security policies, revision trigger, and private image bucket. You can rerun this script.
+Open your Supabase project's **SQL Editor**, create a query, paste the complete contents of `supabase/schema.sql`, and run it. Then run `supabase/board-layout.sql` for the board preferences. The first script creates the notes table, account access list, row-level security policies, revision trigger, and private image bucket. You can rerun this script.
 
 Use the fresh project created for this app. If you use an existing project, review any existing Storage policies: PostgreSQL permissive policies combine with OR, so another broad policy could grant more access than these app-specific policies.
 
@@ -25,6 +29,7 @@ In your project folder run:
 
 ```sh
 npm install @supabase/supabase-js react-markdown remark-gfm idb-keyval
+# Also install the editor and drag dependencies listed in UPDATE-SETUP.md.
 ```
 
 Keep your `.env.local` in the project root (next to package.json):
@@ -66,10 +71,10 @@ The source was checked with a TypeScript build, real-browser flows against a moc
 ## Board and editor
 
 - Click **+** beside the search bar to add a thought. Use the pencil at the top right of a card to edit it. Titles are optional.
-- **Write** and **Preview** switch between Markdown and rendering. Save commits edits; Ctrl+Enter / Cmd+Enter also saves. Cancel or Escape closes the editor, asking before discarding unsaved changes. Canceling a new thought creates no empty card.
+- **Write**, **Markdown**, and **Preview** switch between visual editing, source editing, and rendering. Save commits edits; Ctrl+Enter / Cmd+Enter also saves. Cancel or Escape closes the editor, asking before discarding unsaved changes. Canceling a new thought creates no empty card.
 - The editor has bold, italic, link, image URL, and upload buttons. Uploads accept PNG, JPEG, WebP, or GIF up to 5 MB. Select text before using bold/italic to format that selection.
 - Delete lives inside the editor and requires confirmation.
-- Cards use CSS columns and flow down each column. Column count adjusts to available width, with a single column on small phones. Editing, search, and filtering can change card placement. This version does not include manual dragging or pinning.
+- Cards use measured shortest-column placement with wider columns. Drag handles and the Sort menu organize the board. See UPDATE-SETUP.md for ordering details. Pinning is not included.
 
 ## Dates
 
@@ -102,7 +107,7 @@ The source was checked with a TypeScript build, real-browser flows against a moc
 - Saving requires a connection. A failed save keeps the editor open. Unsaved drafts are not stored across reloads; the browser warns before leaving a changed editor.
 - Your login persists in this browser until sign-out/session expiry. Sign out on shared devices.
 - Removing an image reference, canceling an upload-containing draft, or deleting a note does not delete its uploaded image. Uploads are immutable and retained to avoid breaking shared references; automatic cleanup is future work.
-- No SMS integration, offline editing queue, automated backup/export, password recovery UI, dragging, or pinning is included. For this personal prototype, manage your account through Supabase's dashboard. Add a recovery flow before expanding usage.
+- No SMS integration, offline editing queue, automated backup/export, password recovery UI or pinning is included. For this personal prototype, manage your account through Supabase's dashboard. Add a recovery flow before expanding usage.
 - Next milestone after this works: deploy to Vercel with the same environment variables, then add an authenticated SMS webhook that saves into these tables.
 
 ## Source map

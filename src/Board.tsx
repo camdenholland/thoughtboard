@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import MasonryBoard from "./MasonryBoard";
+import { Particles } from "./Particles";
 import {
   EMPTY_LAYOUT,
   SORT_OPTIONS,
@@ -290,6 +291,7 @@ export default function Board({ userId }: { userId: string }) {
 
   return (
     <>
+      <Particles className="board-particles" quantity={145} color="#88aa96" size={0.65} staticity={70} ease={85} />
       <header className="app-header">
         <div className="brand">
           Thoughtboard<span className="brand-dot">.</span>
@@ -349,7 +351,7 @@ export default function Board({ userId }: { userId: string }) {
                   <Icon name="close" size={14} />
                 </button>
               ) : (
-                <kbd>⌘ / Ctrl K</kbd>
+                <kbd>Ctrl+K</kbd>
               )}
             </div>
             <button

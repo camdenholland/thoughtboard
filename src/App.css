@@ -998,3 +998,25 @@ input[type="checkbox"] {
   color: #f0ffe7;
   border-color: #99bba6;
 }
+
+/* Ambient layer stays behind opaque cards and never receives pointer events. */
+.board-particles {
+  position: fixed;
+  inset: 56px 0 0;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0.8;
+}
+.app { position: relative; z-index: 1; min-height: calc(100vh - 56px); }
+.checklist-hint { margin: -8px 0 20px; color: #a3b49d; font-size: 11px; }
+.rich-content li[data-type="taskItem"] > label { flex-shrink: 0; padding-top: 2px; }
+.rich-content li[data-type="taskItem"] > div { min-width: 0; }
+.rich-content li[data-type="taskItem"][data-checked="true"] > div > p {
+  text-decoration: line-through; color: #929d93;
+}
+.rich-content input[type="checkbox"], .markdown-content input[type="checkbox"] {
+  accent-color: #99bba6;
+}
+.rich-content input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+.markdown-content ul.contains-task-list { list-style: none; padding-left: 0; }
+.markdown-content ul.contains-task-list ul { padding-left: 20px; }
